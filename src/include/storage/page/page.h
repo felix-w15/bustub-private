@@ -36,17 +36,36 @@ class Page {
   /** Default destructor. */
   ~Page() = default;
 
+  /**reset page data*/
+  inline void Reset() {
+    ResetMemory();
+    pin_count_ = 0;
+    page_id_ = INVALID_PAGE_ID;
+    is_dirty_ = false;
+  }
+
   /** @return the actual data contained within this page */
   inline auto GetData() -> char * { return data_; }
 
   /** @return the page id of this page */
   inline auto GetPageId() -> page_id_t { return page_id_; }
 
+  /** @return the page id of this page */
+  inline void SetPageId(page_id_t page_id) { page_id_ = page_id; }
+
   /** @return the pin count of this page */
   inline auto GetPinCount() -> int { return pin_count_; }
 
+  inline auto IsPinned() -> bool { return pin_count_ > 0; }
+
+  inline void IncPinCount() { pin_count_++; }
+
+  inline void DecPinCount() { pin_count_--; }
+
   /** @return true if the page in memory has been modified from the page on disk, false otherwise */
   inline auto IsDirty() -> bool { return is_dirty_; }
+
+  inline void SetIsDirty(bool is_dirty) { is_dirty_ = is_dirty; }
 
   /** Acquire the page write latch. */
   inline void WLatch() { rwlatch_.WLock(); }

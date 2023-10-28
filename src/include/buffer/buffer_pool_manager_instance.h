@@ -140,6 +140,17 @@ class BufferPoolManagerInstance : public BufferPoolManager {
    */
   auto DeletePgImp(page_id_t page_id) -> bool override;
 
+  /** Alloc page and record replacer*/
+  void AllocPageHelper(frame_id_t frame_id, page_id_t *page_id, Page *&page);
+
+  /** Return page by frame id*/
+  auto GetPage(frame_id_t frame_id) -> Page *;
+
+  /* Get replace frame*/
+  auto GetReplacementFrame(frame_id_t &frame_id) -> bool;
+
+  auto FlushPgImpLockFree(page_id_t page_id) -> bool;
+
   /** Number of pages in the buffer pool. */
   const size_t pool_size_;
   /** The next page id to be allocated  */

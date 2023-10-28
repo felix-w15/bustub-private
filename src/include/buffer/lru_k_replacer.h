@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <limits>
 #include <list>
 #include <mutex>  // NOLINT
@@ -22,6 +23,42 @@
 #include "common/macros.h"
 
 namespace bustub {
+
+class LRUNode {
+ public:
+  LRUNode *pre_;
+  LRUNode *next_;
+  LRUNode(size_t k, frame_id_t frame_id) : pre_(this), next_(this), k_(k), frame_id_(frame_id) {}
+  LRUNode(size_t k, frame_id_t frame_id, LRUNode *pre, LRUNode *next)
+      : pre_(pre), next_(next), k_(k), frame_id_(frame_id) {}
+  ~LRUNode() = default;
+  auto AccessCount() -> size_t { return access_counter_; }
+  auto AccessTime() -> size_t {
+    if (!access_time_list_.empty()) {
+      return access_time_list_.front();
+    }
+    return -1;
+  }
+  void Access(size_t acc_ts) {
+    access_time_list_.push_back(acc_ts);
+    if (access_time_list_.size() > k_) {
+      access_time_list_.pop_front();
+    }
+    access_counter_++;
+  }
+  auto GetFrameId() -> frame_id_t { return frame_id_; }
+  void SetEvitable(bool evitable) { evitable_ = evitable; }
+  auto Evitable() -> bool { return evitable_; }
+  std::mutex latch_;
+
+ private:
+  size_t k_;
+  bool evitable_{false};
+  frame_id_t frame_id_{-1};
+  size_t access_counter_{0};
+  // size_t access_time_{0};
+  std::list<size_t> access_time_list_;
+};
 
 /**
  * LRUKReplacer implements the LRU-k replacement policy.
@@ -52,7 +89,7 @@ class LRUKReplacer {
    *
    * @brief Destroys the LRUReplacer.
    */
-  ~LRUKReplacer() = default;
+  ~LRUKReplacer();
 
   /**
    * TODO(P1): Add implementation
@@ -132,14 +169,37 @@ class LRUKReplacer {
    */
   auto Size() -> size_t;
 
+  // head->old->new
+  auto GetKEvitNode() -> LRUNode * { return k_evi_list_.next_ != &k_evi_list_ ? k_evi_list_.next_ : nullptr; }
+  // head->old->new
+  auto GetKlessEviNode() -> LRUNode * {
+    return kless_evi_list_.next_ != &kless_evi_list_ ? kless_evi_list_.next_ : nullptr;
+  }
+
+  auto EviNode() -> LRUNode *;
+
+  auto DeleteNode(LRUNode *node) -> bool;
+
+  void AddNodeToList(LRUNode *node);
+
+  auto GetCurrentTime() -> size_t;
+
  private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
-  [[maybe_unused]] size_t k_;
+  std::atomic_size_t current_timestamp_{0};
+  std::atomic_size_t curr_size_{0};
   std::mutex latch_;
+  std::mutex list_latch_;
+
+  // frame_id -> lru-node
+  std::unordered_map<frame_id_t, LRUNode *> lru_access_map_;
+  LRUNode k_evi_list_;
+  LRUNode kless_evi_list_;
+  size_t replacer_size_;
+  size_t k_;
 };
+
+void InsertNodeToList(LRUNode *list, LRUNode *node);
 
 }  // namespace bustub

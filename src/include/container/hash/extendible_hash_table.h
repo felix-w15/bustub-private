@@ -23,8 +23,8 @@
 #include <utility>
 #include <vector>
 
+#include "common/logger.h"
 #include "container/hash/hash_table.h"
-
 namespace bustub {
 
 /**
@@ -114,6 +114,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
 
     /** @brief Check if a bucket is full. */
     inline auto IsFull() const -> bool { return list_.size() == size_; }
+    inline auto Reset() -> void { list_.clear(); }
 
     /** @brief Get the local depth of the bucket. */
     inline auto GetDepth() const -> int { return depth_; }
@@ -157,6 +158,10 @@ class ExtendibleHashTable : public HashTable<K, V> {
      */
     auto Insert(const K &key, const V &value) -> bool;
 
+    mutable std::mutex latch_;
+    // auto Reset() -> bool {
+    //     list_
+    //   }
    private:
     // TODO(student): You may add additional private members and helper functions
     size_t size_;
@@ -167,12 +172,15 @@ class ExtendibleHashTable : public HashTable<K, V> {
  private:
   // TODO(student): You may add additional private members and helper functions and remove the ones
   // you don't need.
+  void InsertNoLock(const K &key, const V &value);
 
-  int global_depth_;    // The global depth of the directory
-  size_t bucket_size_;  // The size of a bucket
-  int num_buckets_;     // The number of buckets in the hash table
+  int global_depth_{0};  // The global depth of the directory
+  size_t bucket_size_;   // The size of a bucket
+  int num_buckets_{1};   // The number of buckets in the hash table
+
   mutable std::mutex latch_;
   std::vector<std::shared_ptr<Bucket>> dir_;  // The directory of the hash table
+  // std::vector<std::mutex> bucket_latch_;
 
   // The following functions are completely optional, you can delete them if you have your own ideas.
 
@@ -196,6 +204,19 @@ class ExtendibleHashTable : public HashTable<K, V> {
   auto GetGlobalDepthInternal() const -> int;
   auto GetLocalDepthInternal(int dir_index) const -> int;
   auto GetNumBucketsInternal() const -> int;
+
+  auto LocalIndexOf(const K &key) -> size_t;
+  auto IncreaseGlobalDepth(int old_depth) -> void {
+    std::scoped_lock<std::mutex> lock(latch_);
+    if (old_depth == GetGlobalDepthInternal()) {
+      ReserveBucket();
+    }
+  }
+  auto IncreaseLocalDepth(int dir_index, int old_depth) -> void;
+  //
+  // 000 -> bucket1; 010 -> bucket1; 100 -> bucket1; 110 -> bucket1;
+  // 000 -> bucket1; 100 -> bucket1; 010 -> bucket1'; 110 -> bucket1';
+  auto ReserveBucket() -> void;
 };
 
 }  // namespace bustub
