@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
+
 #include "buffer/lru_k_replacer.h"
 
 namespace bustub {
@@ -29,8 +31,12 @@ auto LRUKReplacer::GetCurrentTime() -> size_t {
   return current_timestamp_.fetch_add(1, std::memory_order_relaxed);
 }
 void UnLinkNode(LRUNode *node) {
-  node->pre_->next_ = node->next_;
-  node->next_->pre_ = node->pre_;
+  if (node->pre_ != nullptr) {
+    node->pre_->next_ = node->next_;
+  }
+  if (node->next_ != nullptr) {
+    node->next_->pre_ = node->pre_;
+  }
   node->pre_ = node;
   node->next_ = node;
 }
@@ -65,6 +71,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     (void)DeleteNode(node);
     res = true;
   }
+  // std::cout << "evi frame:" << *frame_id << ", k:" << k_ << std::endl;
   return res;
 }
 
@@ -82,9 +89,12 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
     node = lru_access_map_[frame_id];
   }
   node->Access(current_time);
-  if (node->Evitable() && node->AccessCount() == k_) {
+  // std::cout << "acc, frame_id:" << frame_id << ",cnt:" << node->AccessCount() << ",evi:" << node->Evitable()
+  // << std::endl;
+  if (node->Evitable() && node->AccessCount() >= k_) {
     UnLinkNode(node);
     InsertNodeToList(&k_evi_list_, node);
+    // std::cout << "to evi list:" << frame_id << std::endl;
   }
 }
 
@@ -105,6 +115,7 @@ void InsertNodeToList(LRUNode *list, LRUNode *node) {
     if (head == next || node->AccessTime() < next->AccessTime()) {
       // tail || ealier than next
       LinkNode(node_ptr, node);
+      break;
     }
     node_ptr = next;
   }
@@ -119,10 +130,14 @@ void LRUKReplacer::AddNodeToList(LRUNode *node) {
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
+  // std::cout << "begin set evi:" << frame_id << ", evitable:" << set_evictable << std::endl;
   std::lock_guard<std::mutex> lock(latch_);
-  LRUNode *node = lru_access_map_[frame_id];
-
-  BUSTUB_ASSERT(nullptr != node, "node should have accessed before evict!");
+  LRUNode *node = nullptr;
+  if (lru_access_map_.end() != lru_access_map_.find(frame_id)) {
+    node = lru_access_map_[frame_id];
+  } else {
+    return;
+  }
   bool last_evi_state = node->Evitable();
   bool new_evi_state = set_evictable;
   node->SetEvitable(new_evi_state);
@@ -131,20 +146,34 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
     // evi -> not evi
     UnLinkNode(node);
     curr_size_--;
+    // std::cout << "evi to no evi" << frame_id << std::endl;
   } else if (!last_evi_state && new_evi_state) {
     // not evi -> evi
+    UnLinkNode(node);
     AddNodeToList(node);
     curr_size_++;
+    // std::cout << "no evi to evi" << frame_id << std::endl;
   }
+  // std::cout << "end set evi:" << frame_id << ", evitable:" << set_evictable << std::endl;
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::lock_guard<std::mutex> lock(latch_);
-  LRUNode *node = lru_access_map_[frame_id];
-  if (nullptr != node) {
-    UnLinkNode(node);
-    (void)DeleteNode(node);
+  LRUNode *node = nullptr;
+  if (lru_access_map_.end() != lru_access_map_.find(frame_id)) {
+    node = lru_access_map_[frame_id];
   }
+
+  if (nullptr != node) {
+    BUSTUB_ASSERT(node->Evitable(), "frame should be evitable");
+    UnLinkNode(node);
+    if (node->Evitable()) {
+      curr_size_--;
+    }
+    (void)DeleteNode(node);
+    lru_access_map_.erase(frame_id);
+  }
+  // std::cout << "remove frame:" << frame_id << ",is null:" << (node == nullptr) << std::endl;
 }
 
 auto LRUKReplacer::Size() -> size_t { return curr_size_.load(std::memory_order_relaxed); }
